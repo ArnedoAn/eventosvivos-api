@@ -9,7 +9,7 @@ using FluentAssertions;
 
 namespace EventosVivos.Integration.Tests;
 
-public sealed class EndpointSmokeTests : IClassFixture<ApiFactory>
+public sealed class EndpointSmokeTests : IClassFixture<ApiFactory>, IAsyncLifetime
 {
     private readonly ApiFactory _factory;
     private readonly HttpClient _client;
@@ -18,8 +18,11 @@ public sealed class EndpointSmokeTests : IClassFixture<ApiFactory>
     {
         _factory = factory;
         _client = factory.Client;
-        factory.ResetDatabaseAsync().GetAwaiter().GetResult();
     }
+
+    public Task InitializeAsync() => _factory.ResetDatabaseAsync();
+
+    public Task DisposeAsync() => Task.CompletedTask;
 
     [Fact]
     public async Task Login_with_valid_credentials_returns_token_and_role()

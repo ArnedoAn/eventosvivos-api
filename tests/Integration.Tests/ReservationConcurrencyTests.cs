@@ -9,7 +9,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace EventosVivos.Integration.Tests;
 
-public sealed class ReservationConcurrencyTests : IClassFixture<ApiFactory>
+public sealed class ReservationConcurrencyTests : IClassFixture<ApiFactory>, IAsyncLifetime
 {
     private readonly ApiFactory _factory;
     private readonly HttpClient _client;
@@ -18,8 +18,11 @@ public sealed class ReservationConcurrencyTests : IClassFixture<ApiFactory>
     {
         _factory = factory;
         _client = factory.Client;
-        factory.ResetDatabaseAsync().GetAwaiter().GetResult();
     }
+
+    public Task InitializeAsync() => _factory.ResetDatabaseAsync();
+
+    public Task DisposeAsync() => Task.CompletedTask;
 
     [Fact]
     public async Task Parallel_reservations_never_oversell()
