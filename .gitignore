@@ -22,3 +22,6 @@ appsettings.*.local.json
 ## OS
 .DS_Store
 Thumbs.db
+
+## Superpowers / agent scratch
+.superpowers/
