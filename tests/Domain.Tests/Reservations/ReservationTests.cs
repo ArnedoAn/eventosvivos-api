@@ -27,6 +27,7 @@ public class ReservationTests
         result.Value.CreatedUtc.Should().Be(now);
         result.Value.CancelledUtc.Should().BeNull();
         result.Value.IsLost.Should().BeFalse();
+        result.Value.Code.Should().BeNull();
     }
 
     [Theory]
@@ -65,6 +66,7 @@ public class ReservationTests
     public void Reservation_confirm_from_pendiente_pago_succeeds()
     {
         var reservation = Reservation.Create(Guid.NewGuid(), 2, "John Doe", ValidEmail, DateTime.UtcNow).Value;
+        reservation.Code.Should().BeNull();
         var code = ReservationCode.New(() => 123456);
 
         var result = reservation.Confirm(code);

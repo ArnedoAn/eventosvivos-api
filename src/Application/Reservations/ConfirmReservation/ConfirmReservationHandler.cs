@@ -82,7 +82,7 @@ public sealed class ConfirmReservationHandler
                 .AnyAsync(r =>
                     r.Id != currentReservationId &&
                     r.Status == ReservationStatus.Confirmada &&
-                    r.Code.Value == code.Value, cancellationToken);
+                    r.Code!.Value == code.Value, cancellationToken);
 
             if (!exists)
                 return code;

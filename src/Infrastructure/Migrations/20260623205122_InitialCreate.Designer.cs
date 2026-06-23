@@ -12,7 +12,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace EventosVivos.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260623203504_InitialCreate")]
+    [Migration("20260623205122_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -298,8 +298,7 @@ namespace EventosVivos.Infrastructure.Migrations
                                 .HasForeignKey("ReservationId");
                         });
 
-                    b.Navigation("Code")
-                        .IsRequired();
+                    b.Navigation("Code");
 
                     b.Navigation("Email")
                         .IsRequired();

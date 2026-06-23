@@ -2,6 +2,7 @@ using EventosVivos.Application.Abstractions;
 using EventosVivos.Domain.Abstractions;
 using EventosVivos.Infrastructure.Options;
 using EventosVivos.Infrastructure.Persistence;
+using EventosVivos.Infrastructure.Persistence.Seed;
 using EventosVivos.Infrastructure.Security;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -13,6 +14,8 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
+        SeedPasswords.Initialize(configuration);
+
         var connectionString = configuration.GetConnectionString("DefaultConnection")
             ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
 

@@ -295,8 +295,7 @@ namespace EventosVivos.Infrastructure.Migrations
                                 .HasForeignKey("ReservationId");
                         });
 
-                    b.Navigation("Code")
-                        .IsRequired();
+                    b.Navigation("Code");
 
                     b.Navigation("Email")
                         .IsRequired();

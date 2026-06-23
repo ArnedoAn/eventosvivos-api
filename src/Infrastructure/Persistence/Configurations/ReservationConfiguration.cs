@@ -41,5 +41,7 @@ public class ReservationConfiguration : IEntityTypeConfiguration<Reservation>
                 .IsUnique()
                 .HasFilter("\"Code_Value\" IS NOT NULL");
         });
+
+        builder.Navigation(r => r.Code).IsRequired(false);
     }
 }

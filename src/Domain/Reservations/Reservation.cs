@@ -12,7 +12,7 @@ public sealed class Reservation
     public string BuyerName { get; private set; } = string.Empty;
     public Email Email { get; private set; } = null!;
     public ReservationStatus Status { get; private set; }
-    public ReservationCode Code { get; private set; } = null!;
+    public ReservationCode? Code { get; private set; }
     public DateTime CreatedUtc { get; private set; }
     public DateTime? CancelledUtc { get; private set; }
     public bool IsLost { get; private set; }
