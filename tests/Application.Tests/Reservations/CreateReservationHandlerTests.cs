@@ -34,6 +34,54 @@ public class CreateReservationHandlerTests
             => action();
     }
 
+    private sealed class CountingClock(DateTime start) : IClock
+    {
+        private int _calls;
+        public DateTime UtcNow => start.AddHours(_calls++);
+    }
+
+    private sealed class RetryOnConcurrencyPolicy : IConcurrencyRetryPolicy
+    {
+        public async Task<Result<T>> ExecuteAsync<T>(Func<Task<Result<T>>> action, int maxAttempts = 3)
+        {
+            DbUpdateConcurrencyException? last = null;
+            for (var i = 0; i < maxAttempts; i++)
+            {
+                try
+                {
+                    return await action();
+                }
+                catch (DbUpdateConcurrencyException ex)
+                {
+                    last = ex;
+                }
+            }
+            throw last!;
+        }
+    }
+
+    private sealed class ThrowOnceSaveContext(TestAppDbContext inner) : IAppDbContext
+    {
+        private bool _throw = true;
+
+        public DbSet<Event> Events => inner.Events;
+        public DbSet<Reservation> Reservations => inner.Reservations;
+        public DbSet<Venue> Venues => inner.Venues;
+        public DbSet<AppUser> Users => inner.Users;
+
+        public Task<int> SaveChangesAsync(CancellationToken ct)
+        {
+            if (_throw)
+            {
+                _throw = false;
+                inner.ChangeTracker.Clear();
+                throw new DbUpdateConcurrencyException("Simulated concurrency conflict.");
+            }
+
+            return inner.SaveChangesAsync(ct);
+        }
+    }
+
     private sealed class TestAppDbContext : DbContext, IAppDbContext
     {
         public TestAppDbContext(DbContextOptions<TestAppDbContext> options) : base(options) { }
@@ -212,10 +260,36 @@ public class CreateReservationHandlerTests
     }
 
     [Fact]
+    public async Task Retry_attempt_uses_fresh_clock_time()
+    {
+        var t1 = new DateTime(2030, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var clock = new CountingClock(t1);
+        await using var db = CreateDb();
+        var context = new ThrowOnceSaveContext(db);
+        var evt = CreateTestEvent(
+            new DateTime(2030, 6, 15, 20, 0, 0, DateTimeKind.Utc),
+            new DateTime(2030, 6, 15, 22, 0, 0, DateTimeKind.Utc));
+        db.Events.Add(evt);
+        await db.SaveChangesAsync();
+
+        var handler = new CreateReservationHandler(
+            context,
+            clock,
+            new FakeReservationOptions(),
+            RuleSet(),
+            new RetryOnConcurrencyPolicy());
+
+        var result = await handler.Handle(ValidCommand(evt.Id), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.CreatedUtc.Should().Be(t1.AddHours(1));
+        db.Reservations.Should().ContainSingle();
+    }
+
+    [Fact]
     public void Invalid_email_fails_validation()
     {
-        var clock = new FixedClock(new DateTime(2030, 1, 1, 0, 0, 0, DateTimeKind.Utc));
-        var validator = new CreateReservationValidator(clock);
+        var validator = new CreateReservationValidator();
         var command = new CreateReservationCommand(
             EventId: Guid.NewGuid(),
             Quantity: 1,
@@ -230,8 +304,7 @@ public class CreateReservationHandlerTests
     [Fact]
     public void Zero_quantity_fails_validation()
     {
-        var clock = new FixedClock(new DateTime(2030, 1, 1, 0, 0, 0, DateTimeKind.Utc));
-        var validator = new CreateReservationValidator(clock);
+        var validator = new CreateReservationValidator();
         var command = new CreateReservationCommand(
             EventId: Guid.NewGuid(),
             Quantity: 0,

@@ -21,16 +21,10 @@ public sealed class CreateReservationHandler(
 {
     public async Task<Result<ReservationResponse>> Handle(CreateReservationCommand request, CancellationToken cancellationToken)
     {
-        var evt = await db.Events
-            .FirstOrDefaultAsync(e => e.Id == request.EventId, cancellationToken);
-
-        if (evt is null)
-            return Result.Failure<ReservationResponse>(new Error("event.notFound", "Event not found."));
-
-        var now = clock.UtcNow;
-
         return await retryPolicy.ExecuteAsync(async () =>
         {
+            var now = clock.UtcNow;
+
             var freshEvent = await db.Events
                 .FirstOrDefaultAsync(e => e.Id == request.EventId, cancellationToken);
 

@@ -1,11 +1,10 @@
-using EventosVivos.Domain.Abstractions;
 using FluentValidation;
 
 namespace EventosVivos.Application.Reservations.CreateReservation;
 
 public sealed class CreateReservationValidator : AbstractValidator<CreateReservationCommand>
 {
-    public CreateReservationValidator(IClock clock)
+    public CreateReservationValidator()
     {
         RuleFor(x => x.EventId)
             .NotEmpty();
