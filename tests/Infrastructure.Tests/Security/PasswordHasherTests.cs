@@ -1,7 +1,7 @@
 using EventosVivos.Infrastructure.Security;
 using FluentAssertions;
 
-namespace EventosVivos.Application.Tests.Security;
+namespace EventosVivos.Infrastructure.Tests.Security;
 
 public class PasswordHasherTests
 {

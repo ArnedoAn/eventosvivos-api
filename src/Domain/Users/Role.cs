@@ -2,6 +2,6 @@ namespace EventosVivos.Domain.Users;
 
 public enum Role
 {
-    Admin,
-    User
+    User = 0,
+    Admin = 1
 }

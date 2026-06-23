@@ -3,16 +3,15 @@ using EventosVivos.Domain.Users;
 using EventosVivos.Infrastructure.Options;
 using EventosVivos.Infrastructure.Security;
 using FluentAssertions;
-using Microsoft.Extensions.Options;
 
-namespace EventosVivos.Application.Tests.Security;
+namespace EventosVivos.Infrastructure.Tests.Security;
 
 public class JwtTokenServiceTests
 {
     [Fact]
     public void Generate_returns_valid_token_with_role_claim()
     {
-        var options = Options.Create(new JwtOptions
+        var options = Microsoft.Extensions.Options.Options.Create(new JwtOptions
         {
             Issuer = "test-issuer",
             Audience = "test-audience",
