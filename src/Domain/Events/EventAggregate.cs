@@ -70,6 +70,29 @@ public sealed class Event
         };
     }
 
+    /// <summary>
+    /// Updates the event status based on the current time.
+    /// On-read auto-completion: an active event whose schedule has ended becomes completed.
+    /// Cancelled events are never changed by this method.
+    /// </summary>
+    public void RefreshStatus(DateTime nowUtc)
+    {
+        if (Status == EventStatus.Activo && nowUtc > Schedule.EndUtc)
+            Status = EventStatus.Completado;
+    }
+
+    /// <summary>
+    /// Cancels the event. Only active events can be cancelled.
+    /// </summary>
+    public Result Cancel()
+    {
+        if (Status != EventStatus.Activo)
+            return Result.Failure(new Error("event.notActive", "Only active events can be cancelled."));
+
+        Status = EventStatus.Cancelado;
+        return Result.Success();
+    }
+
     private static bool IsWeekendNight(DateTime startUtc)
     {
         var day = startUtc.DayOfWeek;
