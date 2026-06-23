@@ -23,7 +23,7 @@ public sealed class EventsController(ISender sender) : ControllerBase
     public async Task<IActionResult> Create(CreateEventCommand command, CancellationToken cancellationToken)
     {
         var result = await sender.Send(command, cancellationToken);
-        return result.ToCreatedResult($"/api/events/{result.Value.Id}");
+        return result.ToCreatedResult(value => $"/api/events/{value.Id}");
     }
 
     [HttpGet]

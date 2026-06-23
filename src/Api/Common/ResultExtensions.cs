@@ -21,10 +21,10 @@ public static class ResultExtensions
         return MapError(result.Error);
     }
 
-    public static IActionResult ToCreatedResult<T>(this Result<T> result, string uri)
+    public static IActionResult ToCreatedResult<T>(this Result<T> result, Func<T, string> locationFactory)
     {
         if (result.IsSuccess)
-            return new CreatedResult(uri, result.Value);
+            return new CreatedResult(locationFactory(result.Value), result.Value);
 
         return MapError(result.Error);
     }

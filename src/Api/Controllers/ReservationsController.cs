@@ -23,7 +23,7 @@ public sealed class ReservationsController(ISender sender) : ControllerBase
     public async Task<IActionResult> Create(CreateReservationCommand command, CancellationToken cancellationToken)
     {
         var result = await sender.Send(command, cancellationToken);
-        return result.ToCreatedResult($"/api/reservations/{result.Value.Id}");
+        return result.ToCreatedResult(value => $"/api/reservations/{value.Id}");
     }
 
     [HttpPost("{id:guid}/confirm")]

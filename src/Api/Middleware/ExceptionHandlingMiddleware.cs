@@ -28,7 +28,7 @@ public sealed class ExceptionHandlingMiddleware(RequestDelegate next, ILogger<Ex
         {
             Status = 500,
             Title = "An unexpected error occurred",
-            Detail = exception.Message,
+            Detail = "An unexpected error occurred.",
             Type = "https://httpstatuses.com/500"
         };
 
