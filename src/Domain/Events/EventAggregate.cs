@@ -20,6 +20,8 @@ public sealed class Event
     public int SeatsLost { get; private set; }
     public uint Version { get; private set; }
 
+    public int Remaining => Capacity - SeatsTaken - SeatsLost;
+
     private Event()
     {
     }
@@ -91,6 +93,41 @@ public sealed class Event
 
         Status = EventStatus.Cancelado;
         return Result.Success();
+    }
+
+    public Result HoldOnReserve(int qty, IReservationOptions opt)
+    {
+        if (opt.PendingHoldsInventory)
+        {
+            if (SeatsTaken + SeatsLost + qty > Capacity)
+                return Result.Failure(new Error("event.capacity.exceeded", "Not enough seats available."));
+
+            SeatsTaken += qty;
+        }
+
+        return Result.Success();
+    }
+
+    public Result ConsumeOnConfirm(int qty, IReservationOptions opt)
+    {
+        if (!opt.PendingHoldsInventory)
+        {
+            if (SeatsTaken + SeatsLost + qty > Capacity)
+                return Result.Failure(new Error("event.capacity.exceeded", "Not enough seats available."));
+
+            SeatsTaken += qty;
+        }
+
+        return Result.Success();
+    }
+
+    public void ReleaseOnCancel(int qty, bool penalty)
+    {
+        var released = Math.Min(qty, SeatsTaken);
+        SeatsTaken -= released;
+
+        if (penalty)
+            SeatsLost += released;
     }
 
     private static bool IsWeekendNight(DateTime startUtc)
