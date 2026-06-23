@@ -1,0 +1,37 @@
+services:
+  db:
+    image: postgres:17
+    container_name: eventosvivos-db
+    environment:
+      POSTGRES_DB: eventosvivos
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - eventosvivos-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d eventosvivos"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build: .
+    container_name: eventosvivos-api
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__DefaultConnection: "Host=db;Database=eventosvivos;Username=postgres;Password=postgres"
+      Jwt__Key: "your-256-bit-secret-key-min-32-chars"
+      Jwt__Issuer: "EventosVivos"
+      Jwt__Audience: "EventosVivos"
+      Reservation__PendingHoldsInventory: "true"
+      Reservation__PendingExpirationMinutes: "0"
+    ports:
+      - "8080:8080"
+
+volumes:
+  eventosvivos-data:
