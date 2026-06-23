@@ -8,11 +8,9 @@ public sealed class CreateEventValidator : AbstractValidator<CreateEventCommand>
     public CreateEventValidator(IClock clock)
     {
         RuleFor(x => x.Title)
-            .NotEmpty()
             .Length(5, 100);
 
         RuleFor(x => x.Description)
-            .NotEmpty()
             .Length(10, 500);
 
         RuleFor(x => x.Capacity)
@@ -22,7 +20,7 @@ public sealed class CreateEventValidator : AbstractValidator<CreateEventCommand>
             .GreaterThan(0);
 
         RuleFor(x => x.StartUtc)
-            .GreaterThan(clock.UtcNow);
+            .GreaterThan(x => clock.UtcNow);
 
         RuleFor(x => x.EndUtc)
             .GreaterThan(x => x.StartUtc);
