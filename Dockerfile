@@ -8,16 +8,12 @@ COPY src/Domain/EventosVivos.Domain.csproj src/Domain/
 COPY src/Application/EventosVivos.Application.csproj src/Application/
 COPY src/Infrastructure/EventosVivos.Infrastructure.csproj src/Infrastructure/
 COPY src/Api/EventosVivos.Api.csproj src/Api/
-COPY tests/Domain.Tests/EventosVivos.Domain.Tests.csproj tests/Domain.Tests/
-COPY tests/Application.Tests/EventosVivos.Application.Tests.csproj tests/Application.Tests/
-COPY tests/Infrastructure.Tests/EventosVivos.Infrastructure.Tests.csproj tests/Infrastructure.Tests/
-COPY tests/Integration.Tests/EventosVivos.Integration.Tests.csproj tests/Integration.Tests/
 
-# Restore dependencies
-RUN dotnet restore EventosVivos.slnx
+# Restore dependencies for the API project (test projects are excluded from the Docker context)
+RUN dotnet restore src/Api/EventosVivos.Api.csproj
 
 # Copy the remaining source code
-COPY . .
+COPY src/ src/
 
 # Build and publish the API project
 RUN dotnet publish src/Api/EventosVivos.Api.csproj \
