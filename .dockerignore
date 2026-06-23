@@ -1,0 +1,40 @@
+# Build outputs
+**/bin/
+**/obj/
+
+# Test projects
+tests/
+
+# Git
+.git/
+.gitignore
+
+# Package managers
+node_modules/
+
+# Superpowers task metadata
+.superpowers/
+
+# IDE / editor files
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+
+# Docker artifacts
+Dockerfile*
+docker-compose*
+.dockerignore
+
+# Docs / notes
+*.md
+PLAN.md
+
+# Local environment / secrets
+.env
+.env.*
+secrets/
+
+# Misc
+*.log
