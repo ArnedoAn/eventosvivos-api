@@ -115,6 +115,21 @@ public class ReservationTests
     }
 
     [Fact]
+    public void Reservation_cancel_from_already_cancelled_fails_with_cancelled()
+    {
+        var eventStart = new DateTime(2030, 6, 15, 20, 0, 0, DateTimeKind.Utc);
+        var now = eventStart.AddDays(-3);
+        var reservation = Reservation.Create(Guid.NewGuid(), 2, "John Doe", ValidEmail, now.AddDays(-1)).Value;
+        reservation.Confirm(ReservationCode.New(() => 123456));
+        reservation.Cancel(now, eventStart);
+
+        var result = reservation.Cancel(now, eventStart);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("reservation.cancelled");
+    }
+
+    [Fact]
     public void Reservation_cancel_within_48h_returns_penalty_true_and_marks_lost()
     {
         var eventStart = new DateTime(2030, 6, 15, 20, 0, 0, DateTimeKind.Utc);

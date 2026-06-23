@@ -64,6 +64,9 @@ public sealed class Reservation
 
     public Result<bool> Cancel(DateTime nowUtc, DateTime eventStartUtc)
     {
+        if (Status == ReservationStatus.Cancelada)
+            return Result.Failure<bool>(new Error("reservation.cancelled", "Reservation is cancelled."));
+
         if (Status != ReservationStatus.Confirmada)
             return Result.Failure<bool>(new Error("reservation.notConfirmed", "Only confirmed reservations can be cancelled."));
 
