@@ -1,0 +1,24 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+TestResults/
+[Dd]ebug/
+[Rr]elease/
+artifacts/
+
+## EF / local
+*.db
+*.db-shm
+*.db-wal
+
+## Secrets / local config
+appsettings.*.local.json
+.env
+*.env
+
+## OS
+.DS_Store
+Thumbs.db
