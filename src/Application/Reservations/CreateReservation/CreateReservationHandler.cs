@@ -28,42 +28,49 @@ public sealed class CreateReservationHandler(
             return Result.Failure<ReservationResponse>(new Error("event.notFound", "Event not found."));
 
         var now = clock.UtcNow;
-        evt.RefreshStatus(now);
-
-        if (evt.Status != EventStatus.Activo)
-            return Result.Failure<ReservationResponse>(new Error("event.notActive", "Event is not active."));
-
-        var emailResult = Email.Create(request.BuyerEmail);
-        if (emailResult.IsFailure)
-            return Result.Failure<ReservationResponse>(emailResult.Error);
-
-        var reservationRequest = new ReservationRequest(
-            request.Quantity,
-            evt.Schedule.StartUtc,
-            evt.Price.Amount,
-            evt.Remaining,
-            now);
-
-        var rulesResult = rules.Evaluate(reservationRequest);
-        if (rulesResult.IsFailure)
-            return Result.Failure<ReservationResponse>(rulesResult.Error);
-
-        var holdResult = evt.HoldOnReserve(request.Quantity, options);
-        if (holdResult.IsFailure)
-            return Result.Failure<ReservationResponse>(holdResult.Error);
-
-        var reservationResult = Reservation.Create(
-            evt.Id,
-            request.Quantity,
-            request.BuyerName,
-            emailResult.Value,
-            now);
-
-        if (reservationResult.IsFailure)
-            return Result.Failure<ReservationResponse>(reservationResult.Error);
 
         return await retryPolicy.ExecuteAsync(async () =>
         {
+            var freshEvent = await db.Events
+                .FirstOrDefaultAsync(e => e.Id == request.EventId, cancellationToken);
+
+            if (freshEvent is null)
+                return Result.Failure<ReservationResponse>(new Error("event.notFound", "Event not found."));
+
+            freshEvent.RefreshStatus(now);
+
+            if (freshEvent.Status != EventStatus.Activo)
+                return Result.Failure<ReservationResponse>(new Error("event.notActive", "Event is not active."));
+
+            var emailResult = Email.Create(request.BuyerEmail);
+            if (emailResult.IsFailure)
+                return Result.Failure<ReservationResponse>(emailResult.Error);
+
+            var reservationRequest = new ReservationRequest(
+                request.Quantity,
+                freshEvent.Schedule.StartUtc,
+                freshEvent.Price.Amount,
+                freshEvent.Remaining,
+                now);
+
+            var rulesResult = rules.Evaluate(reservationRequest);
+            if (rulesResult.IsFailure)
+                return Result.Failure<ReservationResponse>(rulesResult.Error);
+
+            var holdResult = freshEvent.HoldOnReserve(request.Quantity, options);
+            if (holdResult.IsFailure)
+                return Result.Failure<ReservationResponse>(holdResult.Error);
+
+            var reservationResult = Reservation.Create(
+                freshEvent.Id,
+                request.Quantity,
+                request.BuyerName,
+                emailResult.Value,
+                now);
+
+            if (reservationResult.IsFailure)
+                return Result.Failure<ReservationResponse>(reservationResult.Error);
+
             db.Reservations.Add(reservationResult.Value);
             await db.SaveChangesAsync(cancellationToken);
 
