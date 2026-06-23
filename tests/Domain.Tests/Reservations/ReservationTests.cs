@@ -153,4 +153,22 @@ public class ReservationTests
 
         code.Value.Should().Be("EV-000042");
     }
+
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(-42)]
+    public void ReservationCode_new_negative_generator_throws(int value)
+    {
+        Action act = () => ReservationCode.New(() => value);
+
+        act.Should().Throw<ArgumentOutOfRangeException>();
+    }
+
+    [Fact]
+    public void ReservationCode_new_generator_above_999999_throws()
+    {
+        Action act = () => ReservationCode.New(() => 1_000_000);
+
+        act.Should().Throw<ArgumentOutOfRangeException>();
+    }
 }

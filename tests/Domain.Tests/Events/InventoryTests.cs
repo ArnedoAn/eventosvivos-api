@@ -148,16 +148,60 @@ public class InventoryTests
         ev.SeatsTaken.Should().Be(0);
     }
 
-    [Fact]
-    public void ReleaseOnCancel_never_allows_negative_seats_taken()
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void ReleaseOnCancel_non_positive_quantity_throws(int qty)
     {
         var ev = CreateEvent();
         var options = new TestOptions { PendingHoldsInventory = true };
         ev.HoldOnReserve(3, options);
 
-        ev.ReleaseOnCancel(5, penalty: false);
+        Action act = () => ev.ReleaseOnCancel(qty, penalty: false);
 
+        act.Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
+    public void ReleaseOnCancel_exceeding_held_seats_throws()
+    {
+        var ev = CreateEvent();
+        var options = new TestOptions { PendingHoldsInventory = true };
+        ev.HoldOnReserve(3, options);
+
+        Action act = () => ev.ReleaseOnCancel(5, penalty: false);
+
+        act.Should().Throw<InvalidOperationException>();
+        ev.SeatsTaken.Should().Be(3);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void HoldOnReserve_non_positive_quantity_fails(int qty)
+    {
+        var ev = CreateEvent();
+        var options = new TestOptions { PendingHoldsInventory = true };
+
+        var result = ev.HoldOnReserve(qty, options);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("event.quantity.invalid");
         ev.SeatsTaken.Should().Be(0);
-        ev.Remaining.Should().Be(100);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void ConsumeOnConfirm_non_positive_quantity_fails(int qty)
+    {
+        var ev = CreateEvent();
+        var options = new TestOptions { PendingHoldsInventory = false };
+
+        var result = ev.ConsumeOnConfirm(qty, options);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("event.quantity.invalid");
+        ev.SeatsTaken.Should().Be(0);
     }
 }

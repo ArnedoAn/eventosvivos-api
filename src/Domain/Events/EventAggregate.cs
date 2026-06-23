@@ -97,6 +97,9 @@ public sealed class Event
 
     public Result HoldOnReserve(int qty, IReservationOptions opt)
     {
+        if (qty <= 0)
+            return Result.Failure(new Error("event.quantity.invalid", "Quantity must be greater than zero."));
+
         if (opt.PendingHoldsInventory)
         {
             if (SeatsTaken + SeatsLost + qty > Capacity)
@@ -110,6 +113,9 @@ public sealed class Event
 
     public Result ConsumeOnConfirm(int qty, IReservationOptions opt)
     {
+        if (qty <= 0)
+            return Result.Failure(new Error("event.quantity.invalid", "Quantity must be greater than zero."));
+
         if (!opt.PendingHoldsInventory)
         {
             if (SeatsTaken + SeatsLost + qty > Capacity)
@@ -123,11 +129,16 @@ public sealed class Event
 
     public void ReleaseOnCancel(int qty, bool penalty)
     {
-        var released = Math.Min(qty, SeatsTaken);
-        SeatsTaken -= released;
+        if (qty <= 0)
+            throw new ArgumentException("Quantity must be greater than zero.", nameof(qty));
+
+        if (qty > SeatsTaken)
+            throw new InvalidOperationException($"Cannot release {qty} seats; only {SeatsTaken} are held.");
+
+        SeatsTaken -= qty;
 
         if (penalty)
-            SeatsLost += released;
+            SeatsLost += qty;
     }
 
     private static bool IsWeekendNight(DateTime startUtc)
