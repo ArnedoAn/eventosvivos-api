@@ -13,11 +13,16 @@ public sealed class CancelReservationHandler(
     IAppDbContext db,
     IClock clock,
     IReservationExpirer expirer,
-    IConcurrencyRetryPolicy retryPolicy)
+    IConcurrencyRetryPolicy retryPolicy,
+    ICurrentUser currentUser)
     : IRequestHandler<CancelReservationCommand, Result<ReservationResponse>>
 {
     public async Task<Result<ReservationResponse>> Handle(CancelReservationCommand request, CancellationToken cancellationToken)
     {
+        var userId = currentUser.Id;
+        if (userId is null)
+            return Result.Failure<ReservationResponse>(new Error("auth.unauthenticated", "Authentication required."));
+
         return await retryPolicy.ExecuteAsync(async () =>
         {
             var now = clock.UtcNow;
@@ -30,7 +35,7 @@ public sealed class CancelReservationHandler(
             if (reservation is null)
                 return Result.Failure<ReservationResponse>(new Error("reservation.notFound", "Reservation not found."));
 
-            if (!request.IsAdmin && reservation.UserId != request.UserId)
+            if (!currentUser.IsInRole("Admin") && reservation.UserId != userId.Value)
                 return Result.Failure<ReservationResponse>(new Error("reservation.forbidden", "You can only cancel your own reservations."));
 
             var evt = await db.Events

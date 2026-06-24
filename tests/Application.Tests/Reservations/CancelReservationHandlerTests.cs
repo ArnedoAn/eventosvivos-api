@@ -117,9 +117,24 @@ public class CancelReservationHandlerTests
         return reservation;
     }
 
-    private static CancelReservationHandler CreateHandler(IAppDbContext db, IClock clock)
+    private sealed class FakeCurrentUser(Guid? id, bool isAdmin = false) : ICurrentUser
     {
-        return new CancelReservationHandler(db, clock, new NoOpReservationExpirer(), new NoOpConcurrencyRetryPolicy());
+        public Guid? Id { get; } = id;
+        public bool IsInRole(string role) => isAdmin && role == "Admin";
+    }
+
+    private static CancelReservationHandler CreateHandler(
+        IAppDbContext db,
+        IClock clock,
+        Guid? currentUserId = null,
+        bool isAdmin = false)
+    {
+        return new CancelReservationHandler(
+            db,
+            clock,
+            new NoOpReservationExpirer(),
+            new NoOpConcurrencyRetryPolicy(),
+            new FakeCurrentUser(currentUserId ?? TestUserId, isAdmin));
     }
 
     [Fact]
@@ -141,7 +156,7 @@ public class CancelReservationHandlerTests
 
         var handler = CreateHandler(db, clock);
 
-        var result = await handler.Handle(new CancelReservationCommand(reservation.Id, TestUserId), CancellationToken.None);
+        var result = await handler.Handle(new CancelReservationCommand(reservation.Id), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Status.Should().Be(ReservationStatus.Cancelada);
@@ -177,7 +192,7 @@ public class CancelReservationHandlerTests
 
         var handler = CreateHandler(db, clock);
 
-        var result = await handler.Handle(new CancelReservationCommand(reservation.Id, TestUserId), CancellationToken.None);
+        var result = await handler.Handle(new CancelReservationCommand(reservation.Id), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Status.Should().Be(ReservationStatus.Cancelada);
@@ -210,7 +225,7 @@ public class CancelReservationHandlerTests
 
         var handler = CreateHandler(db, clock);
 
-        var result = await handler.Handle(new CancelReservationCommand(reservation.Id, TestUserId), CancellationToken.None);
+        var result = await handler.Handle(new CancelReservationCommand(reservation.Id), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
         result.Error.Code.Should().Be("reservation.notConfirmed");
@@ -234,7 +249,7 @@ public class CancelReservationHandlerTests
 
         var handler = CreateHandler(db, clock);
 
-        var result = await handler.Handle(new CancelReservationCommand(reservation.Id, TestUserId), CancellationToken.None);
+        var result = await handler.Handle(new CancelReservationCommand(reservation.Id), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
         result.Error.Code.Should().Be("reservation.cancelled");
@@ -247,7 +262,7 @@ public class CancelReservationHandlerTests
         await using var db = CreateDb();
         var handler = CreateHandler(db, clock);
 
-        var result = await handler.Handle(new CancelReservationCommand(Guid.NewGuid(), TestUserId), CancellationToken.None);
+        var result = await handler.Handle(new CancelReservationCommand(Guid.NewGuid()), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
         result.Error.Code.Should().Be("reservation.notFound");
@@ -270,9 +285,9 @@ public class CancelReservationHandlerTests
         evt.HoldOnReserve(reservation.Quantity, new FakeReservationOptions());
         await db.SaveChangesAsync();
 
-        var handler = CreateHandler(db, clock);
+        var handler = CreateHandler(db, clock, currentUserId: OtherUserId);
 
-        var result = await handler.Handle(new CancelReservationCommand(reservation.Id, OtherUserId), CancellationToken.None);
+        var result = await handler.Handle(new CancelReservationCommand(reservation.Id), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
         result.Error.Code.Should().Be("reservation.forbidden");

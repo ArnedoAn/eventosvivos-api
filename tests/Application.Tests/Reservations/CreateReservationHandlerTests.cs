@@ -198,6 +198,12 @@ public class CreateReservationHandlerTests
             new AvailabilityRule()
         });
 
+    private sealed class FakeCurrentUser(Guid? id) : ICurrentUser
+    {
+        public Guid? Id { get; } = id;
+        public bool IsInRole(string role) => false;
+    }
+
     private static CreateReservationHandler CreateHandler(
         IAppDbContext db,
         IClock clock,
@@ -214,14 +220,14 @@ public class CreateReservationHandlerTests
             options,
             RuleSet(),
             expirer,
-            retryPolicy ?? new NoOpConcurrencyRetryPolicy());
+            retryPolicy ?? new NoOpConcurrencyRetryPolicy(),
+            new FakeCurrentUser(TestUserId));
     }
 
     private static readonly Guid TestUserId = Guid.Parse("11111111-1111-1111-1111-111111111111");
 
     private static CreateReservationCommand ValidCommand(Guid eventId) => new(
         EventId: eventId,
-        UserId: TestUserId,
         Quantity: 2,
         BuyerName: "John Doe",
         BuyerEmail: "john@example.com");
@@ -367,7 +373,6 @@ public class CreateReservationHandlerTests
         var validator = new CreateReservationValidator();
         var command = new CreateReservationCommand(
             EventId: Guid.NewGuid(),
-            UserId: TestUserId,
             Quantity: 1,
             BuyerName: "John Doe",
             BuyerEmail: "not-an-email");
@@ -383,7 +388,6 @@ public class CreateReservationHandlerTests
         var validator = new CreateReservationValidator();
         var command = new CreateReservationCommand(
             EventId: Guid.NewGuid(),
-            UserId: TestUserId,
             Quantity: 0,
             BuyerName: "John Doe",
             BuyerEmail: "john@example.com");

@@ -18,7 +18,6 @@ public class ValidationBehaviorTests
 
         var request = new CreateReservationCommand(
             EventId: Guid.NewGuid(),
-            UserId: Guid.NewGuid(),
             Quantity: 1,
             BuyerName: new string('A', 201),
             BuyerEmail: "not-an-email");
@@ -39,7 +38,6 @@ public class ValidationBehaviorTests
 
         var request = new CreateReservationCommand(
             EventId: Guid.NewGuid(),
-            UserId: Guid.NewGuid(),
             Quantity: 1,
             BuyerName: "John Doe",
             BuyerEmail: "john@example.com");

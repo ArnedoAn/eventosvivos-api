@@ -1,6 +1,8 @@
 using System.Text;
 using EventosVivos.Api.Middleware;
+using EventosVivos.Api.Security;
 using EventosVivos.Application;
+using EventosVivos.Application.Abstractions;
 using EventosVivos.Infrastructure;
 using EventosVivos.Infrastructure.Persistence;
 using EventosVivos.Infrastructure.Persistence.Seed;
@@ -15,6 +17,9 @@ builder.Services.AddControllers();
 
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
+
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ICurrentUser, CurrentUser>();
 
 var jwtSection = builder.Configuration.GetSection("Jwt");
 var jwtKey = jwtSection["Key"]

@@ -17,11 +17,16 @@ public sealed class CreateReservationHandler(
     IReservationOptions options,
     ReservationRuleSet rules,
     IReservationExpirer expirer,
-    IConcurrencyRetryPolicy retryPolicy)
+    IConcurrencyRetryPolicy retryPolicy,
+    ICurrentUser currentUser)
     : IRequestHandler<CreateReservationCommand, Result<ReservationResponse>>
 {
     public async Task<Result<ReservationResponse>> Handle(CreateReservationCommand request, CancellationToken cancellationToken)
     {
+        var userId = currentUser.Id;
+        if (userId is null)
+            return Result.Failure<ReservationResponse>(new Error("auth.unauthenticated", "Authentication required."));
+
         return await retryPolicy.ExecuteAsync(async () =>
         {
             var now = clock.UtcNow;
@@ -60,7 +65,7 @@ public sealed class CreateReservationHandler(
 
             var reservationResult = Reservation.Create(
                 freshEvent.Id,
-                request.UserId,
+                userId.Value,
                 request.Quantity,
                 request.BuyerName,
                 emailResult.Value,
