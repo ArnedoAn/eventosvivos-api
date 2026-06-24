@@ -5,10 +5,8 @@ using System.Text.Json.Serialization;
 using EventosVivos.Application.Auth.Login;
 using EventosVivos.Infrastructure.Persistence;
 using EventosVivos.Infrastructure.Persistence.Seed;
-using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Testcontainers.PostgreSql;
 
@@ -17,6 +15,7 @@ namespace EventosVivos.Integration.Tests;
 public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
 {
     private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder()
+        .WithImage("postgres:15-alpine")
         .WithDatabase("eventosvivos_test")
         .WithUsername("postgres")
         .WithPassword("postgres")
@@ -24,26 +23,25 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
 
     public HttpClient Client { get; private set; } = null!;
 
-    protected override void ConfigureWebHost(IWebHostBuilder builder)
+    private string _connectionString = string.Empty;
+
+    public ApiFactory()
     {
-        builder.ConfigureAppConfiguration(config =>
-        {
-            config.AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["ConnectionStrings:DefaultConnection"] = _postgres.GetConnectionString(),
-                ["Jwt:Key"] = "integration-test-key-must-be-at-least-32-bytes-long!",
-                ["Jwt:Issuer"] = "EventosVivos.Tests",
-                ["Jwt:Audience"] = "EventosVivos.Tests",
-                ["Jwt:ExpiryMinutes"] = "60",
-                ["Reservation:PendingHoldsInventory"] = "true",
-                ["Reservation:PendingExpirationMinutes"] = "0"
-            });
-        });
     }
 
     public async Task InitializeAsync()
     {
         await _postgres.StartAsync();
+        _connectionString = _postgres.GetConnectionString();
+
+        Environment.SetEnvironmentVariable("ConnectionStrings__DefaultConnection", _connectionString);
+        Environment.SetEnvironmentVariable("Jwt__Key", "integration-test-key-must-be-at-least-32-bytes-long!");
+        Environment.SetEnvironmentVariable("Jwt__Issuer", "EventosVivos.Tests");
+        Environment.SetEnvironmentVariable("Jwt__Audience", "EventosVivos.Tests");
+        Environment.SetEnvironmentVariable("Jwt__ExpiryMinutes", "60");
+        Environment.SetEnvironmentVariable("Reservation__PendingHoldsInventory", "true");
+        Environment.SetEnvironmentVariable("Reservation__PendingExpirationMinutes", "0");
+
         Client = CreateClient();
 
         await using var scope = Services.CreateAsyncScope();
@@ -90,6 +88,7 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     public static JsonSerializerOptions JsonOptions => new(JsonSerializerDefaults.Web)
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        Converters = { new JsonStringEnumConverter() }
     };
 }

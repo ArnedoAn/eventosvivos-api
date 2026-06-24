@@ -7,8 +7,11 @@ using EventosVivos.Application.Reservations.CreateReservation;
 using EventosVivos.Domain.Enums;
 using FluentAssertions;
 
+using Xunit;
+
 namespace EventosVivos.Integration.Tests;
 
+[Collection("Sequential")]
 public sealed class EndpointSmokeTests : IClassFixture<ApiFactory>, IAsyncLifetime
 {
     private readonly ApiFactory _factory;
@@ -121,16 +124,19 @@ public sealed class EndpointSmokeTests : IClassFixture<ApiFactory>, IAsyncLifeti
         using var admin = await _factory.CreateAuthenticatedClientAsync("Admin");
         using var user = await _factory.CreateAuthenticatedClientAsync("User");
 
+        var start = DateTime.UtcNow.AddHours(36);
+        var end = start.AddHours(2);
+
         var eventResponse = await admin.PostAsJsonAsync("/api/events", new
         {
             title = "Theatre Play",
             description = "A classic theatre performance.",
             venueId = 3,
             capacity = 10,
-            startUtc = new DateTime(2030, 8, 20, 19, 0, 0, DateTimeKind.Utc),
-            endUtc = new DateTime(2030, 8, 20, 21, 0, 0, DateTimeKind.Utc),
+            startUtc = start,
+            endUtc = end,
             price = 75m,
-            type = "Teatro"
+            type = "Concierto"
         });
         eventResponse.StatusCode.Should().Be(HttpStatusCode.Created);
         var evt = await eventResponse.Content.ReadFromJsonAsync<EventResponse>(ApiFactory.JsonOptions);
