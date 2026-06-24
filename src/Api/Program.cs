@@ -3,6 +3,7 @@ using EventosVivos.Api.Middleware;
 using EventosVivos.Application;
 using EventosVivos.Infrastructure;
 using EventosVivos.Infrastructure.Persistence;
+using EventosVivos.Infrastructure.Persistence.Seed;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -18,6 +19,19 @@ builder.Services.AddInfrastructure(builder.Configuration);
 var jwtSection = builder.Configuration.GetSection("Jwt");
 var jwtKey = jwtSection["Key"]
     ?? throw new InvalidOperationException("JWT key is not configured.");
+
+const string placeholderKey = "replace-this-with-a-secure-key-at-least-32-bytes!";
+if (jwtKey == placeholderKey || Encoding.UTF8.GetByteCount(jwtKey) < 32)
+{
+    throw new InvalidOperationException(
+        "JWT key is missing, uses the placeholder value, or is shorter than 32 bytes. Configure a secure key via Jwt:Key.");
+}
+
+var jwtExpiryMinutes = jwtSection.GetValue<int?>("ExpiryMinutes");
+if (jwtExpiryMinutes is null or <= 0)
+{
+    throw new InvalidOperationException("Jwt:ExpiryMinutes must be configured with a value greater than zero.");
+}
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -77,7 +91,16 @@ app.MapControllers();
 using (var scope = app.Services.CreateScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    await dbContext.Database.MigrateAsync();
+
+    if (app.Environment.IsDevelopment() || builder.Configuration.GetValue<bool>("RunMigrations"))
+    {
+        await dbContext.Database.MigrateAsync();
+    }
+
+    if (app.Environment.IsDevelopment())
+    {
+        await DevDataSeeder.SeedAsync(dbContext);
+    }
 }
 
 app.Run();
