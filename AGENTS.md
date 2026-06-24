@@ -7,13 +7,16 @@ dotnet build                              # Build entire solution
 rtk dotnet test                           # Run all tests
 dotnet test tests/Domain.Tests            # Run Domain tests only
 dotnet test tests/Application.Tests       # Run Application tests only
-dotnet test tests/Integration.Tests       # Run Integration tests (needs Postgres)
+dotnet test tests/Infrastructure.Tests    # Run Infrastructure tests only
+dotnet test tests/Integration.Tests       # Run Integration tests (needs Docker + Postgres)
 dotnet run --project src/Api              # Start API (migrates + seeds on startup)
 ```
 
+The connection string is read from `ConnectionStrings:DefaultConnection` (e.g., `ConnectionStrings__DefaultConnection` as an environment variable).
+
 ## Architecture
 
-Clean Architecture, 7 projects in `EventosVivos.slnx` (new XML solution format):
+Clean Architecture, 8 projects in `EventosVivos.slnx` (new XML solution format):
 
 | Layer | Project | Depends On |
 |-------|---------|------------|
@@ -21,6 +24,7 @@ Clean Architecture, 7 projects in `EventosVivos.slnx` (new XML solution format):
 | Application | `src/Application` | Domain |
 | Infrastructure | `src/Infrastructure` | Application, Domain |
 | Api | `src/Api` | Application, Infrastructure |
+| Infrastructure.Tests | `tests/Infrastructure.Tests` | Infrastructure, Application, Domain |
 
 Never invert these dependencies. No business exceptions — expected failures return `Result<T>`. All timestamps are UTC.
 
@@ -44,7 +48,8 @@ Never invert these dependencies. No business exceptions — expected failures re
 
 - `tests/Domain.Tests` — unit tests on domain (no external deps)
 - `tests/Application.Tests` — handler tests with in-memory EF + mocked clock/options
+- `tests/Infrastructure.Tests` — tests for Infrastructure services (DI, options, security, retry policy)
 - `tests/Integration.Tests` — `WebApplicationFactory` + Testcontainers Postgres; concurrency oversell proof
 
-Test packages installed: xUnit 2.9.3, coverlet 6.0.4, MS Test.Sdk 17.14.1.
-Note: `FluentAssertions` and `Testcontainers.PostgreSql` are referenced in the plan but **not yet installed** in test projects.
+Test packages installed: xUnit 2.9.3, coverlet 6.0.4, MS Test.Sdk 17.14.1, FluentAssertions 8.2.0.
+Integration tests also use `Testcontainers.PostgreSql` 4.4.0 and `Microsoft.AspNetCore.Mvc.Testing` 10.0.9.
