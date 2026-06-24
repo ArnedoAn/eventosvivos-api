@@ -24,14 +24,55 @@ public class CreateReservationHandlerTests
 
     private sealed class FakeReservationOptions : IReservationOptions
     {
-        public bool PendingHoldsInventory => true;
-        public int PendingExpirationMinutes => 0;
+        public bool PendingHoldsInventory { get; init; } = true;
+        public int PendingExpirationMinutes { get; init; } = 0;
     }
 
     private sealed class NoOpConcurrencyRetryPolicy : IConcurrencyRetryPolicy
     {
         public Task<Result<T>> ExecuteAsync<T>(Func<Task<Result<T>>> action, int maxAttempts = 3)
             => action();
+    }
+
+    private sealed class NoOpReservationExpirer : IReservationExpirer
+    {
+        public Task ExpireOverduePendingReservationsAsync(Guid eventId, DateTime nowUtc, CancellationToken ct = default)
+            => Task.CompletedTask;
+    }
+
+    private sealed class EagerReservationExpirer : IReservationExpirer
+    {
+        private readonly IAppDbContext _db;
+        private readonly IReservationOptions _options;
+
+        public EagerReservationExpirer(IAppDbContext db, IReservationOptions options)
+        {
+            _db = db;
+            _options = options;
+        }
+
+        public async Task ExpireOverduePendingReservationsAsync(Guid eventId, DateTime nowUtc, CancellationToken ct = default)
+        {
+            if (!_options.PendingHoldsInventory || _options.PendingExpirationMinutes <= 0)
+                return;
+
+            var cutoff = nowUtc.AddMinutes(-_options.PendingExpirationMinutes);
+            var pending = await _db.Reservations
+                .Where(r => r.EventId == eventId && r.Status == ReservationStatus.PendientePago && r.CreatedUtc <= cutoff)
+                .ToListAsync(ct);
+
+            var evt = await _db.Events.FirstOrDefaultAsync(e => e.Id == eventId, ct);
+            if (evt is null)
+                return;
+
+            foreach (var reservation in pending)
+            {
+                if (reservation.Expire(nowUtc).IsSuccess)
+                    evt.ReleasePendingHold(reservation.Quantity);
+            }
+
+            await _db.SaveChangesAsync(ct);
+        }
     }
 
     private sealed class CountingClock(DateTime start) : IClock
@@ -80,6 +121,8 @@ public class CreateReservationHandlerTests
 
             return inner.SaveChangesAsync(ct);
         }
+
+        public void ResetChangeTracker() => inner.ResetChangeTracker();
     }
 
     private sealed class TestAppDbContext : DbContext, IAppDbContext
@@ -90,6 +133,7 @@ public class CreateReservationHandlerTests
         public DbSet<Reservation> Reservations => Set<Reservation>();
         public DbSet<Venue> Venues => Set<Venue>();
         public DbSet<AppUser> Users => Set<AppUser>();
+        public void ResetChangeTracker() => ChangeTracker.Clear();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -154,8 +198,30 @@ public class CreateReservationHandlerTests
             new AvailabilityRule()
         });
 
+    private static CreateReservationHandler CreateHandler(
+        IAppDbContext db,
+        IClock clock,
+        IConcurrencyRetryPolicy? retryPolicy = null,
+        IReservationOptions? options = null,
+        IReservationExpirer? expirer = null)
+    {
+        options ??= new FakeReservationOptions();
+        expirer ??= new NoOpReservationExpirer();
+
+        return new CreateReservationHandler(
+            db,
+            clock,
+            options,
+            RuleSet(),
+            expirer,
+            retryPolicy ?? new NoOpConcurrencyRetryPolicy());
+    }
+
+    private static readonly Guid TestUserId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+
     private static CreateReservationCommand ValidCommand(Guid eventId) => new(
         EventId: eventId,
+        UserId: TestUserId,
         Quantity: 2,
         BuyerName: "John Doe",
         BuyerEmail: "john@example.com");
@@ -171,17 +237,13 @@ public class CreateReservationHandlerTests
         db.Events.Add(evt);
         await db.SaveChangesAsync();
 
-        var handler = new CreateReservationHandler(
-            db,
-            clock,
-            new FakeReservationOptions(),
-            RuleSet(),
-            new NoOpConcurrencyRetryPolicy());
+        var handler = CreateHandler(db, clock);
 
         var result = await handler.Handle(ValidCommand(evt.Id), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Status.Should().Be(ReservationStatus.PendientePago);
+        result.Value.UserId.Should().Be(TestUserId);
         result.Value.Quantity.Should().Be(2);
         result.Value.BuyerEmail.Should().Be("john@example.com");
         db.Reservations.Should().ContainSingle();
@@ -201,12 +263,7 @@ public class CreateReservationHandlerTests
         db.Events.Add(evt);
         await db.SaveChangesAsync();
 
-        var handler = new CreateReservationHandler(
-            db,
-            queryClock,
-            new FakeReservationOptions(),
-            RuleSet(),
-            new NoOpConcurrencyRetryPolicy());
+        var handler = CreateHandler(db, queryClock);
 
         var result = await handler.Handle(ValidCommand(evt.Id), CancellationToken.None);
 
@@ -226,12 +283,7 @@ public class CreateReservationHandlerTests
         db.Events.Add(evt);
         await db.SaveChangesAsync();
 
-        var handler = new CreateReservationHandler(
-            db,
-            clock,
-            new FakeReservationOptions(),
-            RuleSet(),
-            new NoOpConcurrencyRetryPolicy());
+        var handler = CreateHandler(db, clock);
         var command = ValidCommand(evt.Id) with { Quantity = 11 };
 
         var result = await handler.Handle(command, CancellationToken.None);
@@ -246,17 +298,45 @@ public class CreateReservationHandlerTests
         var clock = new FixedClock(new DateTime(2030, 1, 1, 0, 0, 0, DateTimeKind.Utc));
         await using var db = CreateDb();
 
-        var handler = new CreateReservationHandler(
-            db,
-            clock,
-            new FakeReservationOptions(),
-            RuleSet(),
-            new NoOpConcurrencyRetryPolicy());
+        var handler = CreateHandler(db, clock);
 
         var result = await handler.Handle(ValidCommand(Guid.NewGuid()), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
         result.Error.Code.Should().Be("event.notFound");
+    }
+
+    [Fact]
+    public async Task Expired_pending_reservation_releases_inventory_for_new_reservation()
+    {
+        var now = new DateTime(2030, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var clock = new FixedClock(now);
+        await using var db = CreateDb();
+        var evt = CreateTestEvent(
+            new DateTime(2030, 6, 15, 20, 0, 0, DateTimeKind.Utc),
+            new DateTime(2030, 6, 15, 22, 0, 0, DateTimeKind.Utc),
+            capacity: 10);
+        db.Events.Add(evt);
+
+        var email = Email.Create("existing@example.com").Value;
+        var oldReservation = Reservation.Create(evt.Id, Guid.NewGuid(), 10, "Jane Doe", email, now.AddMinutes(-30)).Value;
+        db.Reservations.Add(oldReservation);
+        evt.HoldOnReserve(10, new FakeReservationOptions());
+        await db.SaveChangesAsync();
+
+        var options = new FakeReservationOptions { PendingExpirationMinutes = 15 };
+        var expirer = new EagerReservationExpirer(db, options);
+        var handler = CreateHandler(db, clock, options: options, expirer: expirer);
+
+        var result = await handler.Handle(
+            ValidCommand(evt.Id) with { BuyerEmail = "new@example.com" },
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Quantity.Should().Be(2);
+        evt.Remaining.Should().Be(8);
+        db.Reservations.Count(r => r.EventId == evt.Id).Should().Be(2);
+        db.Reservations.Count(r => r.EventId == evt.Id && r.Status == ReservationStatus.Cancelada).Should().Be(1);
     }
 
     [Fact]
@@ -272,12 +352,7 @@ public class CreateReservationHandlerTests
         db.Events.Add(evt);
         await db.SaveChangesAsync();
 
-        var handler = new CreateReservationHandler(
-            context,
-            clock,
-            new FakeReservationOptions(),
-            RuleSet(),
-            new RetryOnConcurrencyPolicy());
+        var handler = CreateHandler(context, clock, new RetryOnConcurrencyPolicy());
 
         var result = await handler.Handle(ValidCommand(evt.Id), CancellationToken.None);
 
@@ -292,6 +367,7 @@ public class CreateReservationHandlerTests
         var validator = new CreateReservationValidator();
         var command = new CreateReservationCommand(
             EventId: Guid.NewGuid(),
+            UserId: TestUserId,
             Quantity: 1,
             BuyerName: "John Doe",
             BuyerEmail: "not-an-email");
@@ -307,6 +383,7 @@ public class CreateReservationHandlerTests
         var validator = new CreateReservationValidator();
         var command = new CreateReservationCommand(
             EventId: Guid.NewGuid(),
+            UserId: TestUserId,
             Quantity: 0,
             BuyerName: "John Doe",
             BuyerEmail: "john@example.com");

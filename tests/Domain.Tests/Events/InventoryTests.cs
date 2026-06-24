@@ -101,8 +101,9 @@ public class InventoryTests
         var options = new TestOptions { PendingHoldsInventory = true };
         ev.HoldOnReserve(3, options);
 
-        ev.ReleaseOnCancel(3, penalty: false);
+        var result = ev.ReleaseOnCancel(3, penalty: false);
 
+        result.IsSuccess.Should().BeTrue();
         ev.SeatsTaken.Should().Be(0);
         ev.SeatsLost.Should().Be(0);
         ev.Remaining.Should().Be(100);
@@ -115,8 +116,9 @@ public class InventoryTests
         var options = new TestOptions { PendingHoldsInventory = true };
         ev.HoldOnReserve(3, options);
 
-        ev.ReleaseOnCancel(3, penalty: true);
+        var result = ev.ReleaseOnCancel(3, penalty: true);
 
+        result.IsSuccess.Should().BeTrue();
         ev.SeatsTaken.Should().Be(0);
         ev.SeatsLost.Should().Be(3);
         ev.Remaining.Should().Be(97);
@@ -151,27 +153,73 @@ public class InventoryTests
     [Theory]
     [InlineData(0)]
     [InlineData(-1)]
-    public void ReleaseOnCancel_non_positive_quantity_throws(int qty)
+    public void ReleaseOnCancel_non_positive_quantity_fails(int qty)
     {
         var ev = CreateEvent();
         var options = new TestOptions { PendingHoldsInventory = true };
         ev.HoldOnReserve(3, options);
 
-        Action act = () => ev.ReleaseOnCancel(qty, penalty: false);
+        var result = ev.ReleaseOnCancel(qty, penalty: false);
 
-        act.Should().Throw<ArgumentException>();
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("event.quantity.invalid");
     }
 
     [Fact]
-    public void ReleaseOnCancel_exceeding_held_seats_throws()
+    public void ReleaseOnCancel_exceeding_held_seats_fails()
     {
         var ev = CreateEvent();
         var options = new TestOptions { PendingHoldsInventory = true };
         ev.HoldOnReserve(3, options);
 
-        Action act = () => ev.ReleaseOnCancel(5, penalty: false);
+        var result = ev.ReleaseOnCancel(5, penalty: false);
 
-        act.Should().Throw<InvalidOperationException>();
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("event.capacity.overRelease");
+        ev.SeatsTaken.Should().Be(3);
+    }
+
+    [Fact]
+    public void ReleasePendingHold_decrements_seats_taken()
+    {
+        var ev = CreateEvent();
+        var options = new TestOptions { PendingHoldsInventory = true };
+        ev.HoldOnReserve(5, options);
+
+        var result = ev.ReleasePendingHold(3);
+
+        result.IsSuccess.Should().BeTrue();
+        ev.SeatsTaken.Should().Be(2);
+        ev.SeatsLost.Should().Be(0);
+        ev.Remaining.Should().Be(98);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void ReleasePendingHold_non_positive_quantity_fails(int qty)
+    {
+        var ev = CreateEvent();
+        var options = new TestOptions { PendingHoldsInventory = true };
+        ev.HoldOnReserve(5, options);
+
+        var result = ev.ReleasePendingHold(qty);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("event.quantity.invalid");
+    }
+
+    [Fact]
+    public void ReleasePendingHold_exceeding_held_seats_fails()
+    {
+        var ev = CreateEvent();
+        var options = new TestOptions { PendingHoldsInventory = true };
+        ev.HoldOnReserve(3, options);
+
+        var result = ev.ReleasePendingHold(5);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("event.capacity.overRelease");
         ev.SeatsTaken.Should().Be(3);
     }
 

@@ -1,4 +1,5 @@
 using System.IdentityModel.Tokens.Jwt;
+using EventosVivos.Domain.Abstractions;
 using EventosVivos.Domain.Users;
 using EventosVivos.Infrastructure.Options;
 using EventosVivos.Infrastructure.Security;
@@ -8,6 +9,11 @@ namespace EventosVivos.Infrastructure.Tests.Security;
 
 public class JwtTokenServiceTests
 {
+    private sealed class FixedClock(DateTime now) : IClock
+    {
+        public DateTime UtcNow => now;
+    }
+
     [Fact]
     public void Generate_returns_valid_token_with_role_claim()
     {
@@ -18,7 +24,8 @@ public class JwtTokenServiceTests
             Key = "super-secret-key-at-least-32-bytes!",
             ExpiryMinutes = 60
         });
-        var service = new JwtTokenService(options);
+        var clock = new FixedClock(new DateTime(2030, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+        var service = new JwtTokenService(options, clock);
         var user = new AppUser
         {
             Id = Guid.NewGuid(),

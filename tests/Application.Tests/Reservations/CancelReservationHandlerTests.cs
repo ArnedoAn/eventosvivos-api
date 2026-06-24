@@ -28,6 +28,12 @@ public class CancelReservationHandlerTests
             => action();
     }
 
+    private sealed class NoOpReservationExpirer : IReservationExpirer
+    {
+        public Task ExpireOverduePendingReservationsAsync(Guid eventId, DateTime nowUtc, CancellationToken ct = default)
+            => Task.CompletedTask;
+    }
+
     private sealed class TestAppDbContext : DbContext, IAppDbContext
     {
         public TestAppDbContext(DbContextOptions<TestAppDbContext> options) : base(options) { }
@@ -36,6 +42,7 @@ public class CancelReservationHandlerTests
         public DbSet<Reservation> Reservations => Set<Reservation>();
         public DbSet<Venue> Venues => Set<Venue>();
         public DbSet<AppUser> Users => Set<AppUser>();
+        public void ResetChangeTracker() => ChangeTracker.Clear();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -95,6 +102,9 @@ public class CancelReservationHandlerTests
             clock).Value;
     }
 
+    private static readonly Guid TestUserId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+    private static readonly Guid OtherUserId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+
     private static Reservation CreateConfirmedReservation(
         Guid eventId,
         int quantity = 2,
@@ -102,14 +112,14 @@ public class CancelReservationHandlerTests
     {
         var clock = new FixedClock(createdUtc ?? new DateTime(2030, 1, 1, 0, 0, 0, DateTimeKind.Utc));
         var email = Email.Create("buyer@example.com").Value;
-        var reservation = Reservation.Create(eventId, quantity, "John Doe", email, clock.UtcNow).Value;
+        var reservation = Reservation.Create(eventId, TestUserId, quantity, "John Doe", email, clock.UtcNow).Value;
         reservation.Confirm(ReservationCode.New(() => 123456));
         return reservation;
     }
 
     private static CancelReservationHandler CreateHandler(IAppDbContext db, IClock clock)
     {
-        return new CancelReservationHandler(db, clock, new NoOpConcurrencyRetryPolicy());
+        return new CancelReservationHandler(db, clock, new NoOpReservationExpirer(), new NoOpConcurrencyRetryPolicy());
     }
 
     [Fact]
@@ -131,7 +141,7 @@ public class CancelReservationHandlerTests
 
         var handler = CreateHandler(db, clock);
 
-        var result = await handler.Handle(new CancelReservationCommand(reservation.Id), CancellationToken.None);
+        var result = await handler.Handle(new CancelReservationCommand(reservation.Id, TestUserId), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Status.Should().Be(ReservationStatus.Cancelada);
@@ -167,7 +177,7 @@ public class CancelReservationHandlerTests
 
         var handler = CreateHandler(db, clock);
 
-        var result = await handler.Handle(new CancelReservationCommand(reservation.Id), CancellationToken.None);
+        var result = await handler.Handle(new CancelReservationCommand(reservation.Id, TestUserId), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Status.Should().Be(ReservationStatus.Cancelada);
@@ -194,13 +204,13 @@ public class CancelReservationHandlerTests
             new DateTime(2030, 6, 15, 22, 0, 0, DateTimeKind.Utc));
         db.Events.Add(evt);
         var email = Email.Create("buyer@example.com").Value;
-        var reservation = Reservation.Create(evt.Id, 2, "John Doe", email, clock.UtcNow).Value;
+        var reservation = Reservation.Create(evt.Id, TestUserId, 2, "John Doe", email, clock.UtcNow).Value;
         db.Reservations.Add(reservation);
         await db.SaveChangesAsync();
 
         var handler = CreateHandler(db, clock);
 
-        var result = await handler.Handle(new CancelReservationCommand(reservation.Id), CancellationToken.None);
+        var result = await handler.Handle(new CancelReservationCommand(reservation.Id, TestUserId), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
         result.Error.Code.Should().Be("reservation.notConfirmed");
@@ -224,7 +234,7 @@ public class CancelReservationHandlerTests
 
         var handler = CreateHandler(db, clock);
 
-        var result = await handler.Handle(new CancelReservationCommand(reservation.Id), CancellationToken.None);
+        var result = await handler.Handle(new CancelReservationCommand(reservation.Id, TestUserId), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
         result.Error.Code.Should().Be("reservation.cancelled");
@@ -237,9 +247,34 @@ public class CancelReservationHandlerTests
         await using var db = CreateDb();
         var handler = CreateHandler(db, clock);
 
-        var result = await handler.Handle(new CancelReservationCommand(Guid.NewGuid()), CancellationToken.None);
+        var result = await handler.Handle(new CancelReservationCommand(Guid.NewGuid(), TestUserId), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
         result.Error.Code.Should().Be("reservation.notFound");
+    }
+
+    [Fact]
+    public async Task Cancel_reservation_by_non_owner_returns_forbidden_error()
+    {
+        var now = new DateTime(2030, 6, 13, 19, 0, 0, DateTimeKind.Utc);
+        var clock = new FixedClock(now);
+        await using var db = CreateDb();
+        var evt = CreateTestEvent(
+            new DateTime(2030, 6, 15, 20, 0, 0, DateTimeKind.Utc),
+            new DateTime(2030, 6, 15, 22, 0, 0, DateTimeKind.Utc));
+        db.Events.Add(evt);
+        var reservation = CreateConfirmedReservation(evt.Id);
+        db.Reservations.Add(reservation);
+        await db.SaveChangesAsync();
+
+        evt.HoldOnReserve(reservation.Quantity, new FakeReservationOptions());
+        await db.SaveChangesAsync();
+
+        var handler = CreateHandler(db, clock);
+
+        var result = await handler.Handle(new CancelReservationCommand(reservation.Id, OtherUserId), CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("reservation.forbidden");
     }
 }

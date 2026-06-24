@@ -14,9 +14,12 @@ public class ReservationTests
     public void Reservation_create_happy_path_returns_pendiente_pago()
     {
         var eventId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
         var now = new DateTime(2030, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
-        var result = Reservation.Create(eventId, 2, "John Doe", ValidEmail, now);
+        var result = Reservation.Create(eventId, userId, 2, "John Doe", ValidEmail, now);
+
+        result.Value.UserId.Should().Be(userId);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.EventId.Should().Be(eventId);
@@ -35,7 +38,7 @@ public class ReservationTests
     [InlineData(-1, "reservation.quantity.invalid")]
     public void Reservation_create_invalid_quantity_fails(int quantity, string expectedCode)
     {
-        var result = Reservation.Create(Guid.NewGuid(), quantity, "John Doe", ValidEmail, DateTime.UtcNow);
+        var result = Reservation.Create(Guid.NewGuid(), Guid.NewGuid(), quantity, "John Doe", ValidEmail, DateTime.UtcNow);
 
         result.IsFailure.Should().BeTrue();
         result.Error.Code.Should().Be(expectedCode);
@@ -47,7 +50,7 @@ public class ReservationTests
     [InlineData("   ", "reservation.buyerName.required")]
     public void Reservation_create_invalid_buyer_name_fails(string? buyerName, string expectedCode)
     {
-        var result = Reservation.Create(Guid.NewGuid(), 2, buyerName!, ValidEmail, DateTime.UtcNow);
+        var result = Reservation.Create(Guid.NewGuid(), Guid.NewGuid(), 2, buyerName!, ValidEmail, DateTime.UtcNow);
 
         result.IsFailure.Should().BeTrue();
         result.Error.Code.Should().Be(expectedCode);
@@ -56,7 +59,7 @@ public class ReservationTests
     [Fact]
     public void Reservation_create_null_email_fails()
     {
-        var result = Reservation.Create(Guid.NewGuid(), 2, "John Doe", null!, DateTime.UtcNow);
+        var result = Reservation.Create(Guid.NewGuid(), Guid.NewGuid(), 2, "John Doe", null!, DateTime.UtcNow);
 
         result.IsFailure.Should().BeTrue();
         result.Error.Code.Should().Be("reservation.email.required");
@@ -65,7 +68,7 @@ public class ReservationTests
     [Fact]
     public void Reservation_confirm_from_pendiente_pago_succeeds()
     {
-        var reservation = Reservation.Create(Guid.NewGuid(), 2, "John Doe", ValidEmail, DateTime.UtcNow).Value;
+        var reservation = Reservation.Create(Guid.NewGuid(), Guid.NewGuid(), 2, "John Doe", ValidEmail, DateTime.UtcNow).Value;
         reservation.Code.Should().BeNull();
         var code = ReservationCode.New(() => 123456);
 
@@ -79,7 +82,7 @@ public class ReservationTests
     [Fact]
     public void Reservation_confirm_twice_fails_with_already_confirmed()
     {
-        var reservation = Reservation.Create(Guid.NewGuid(), 2, "John Doe", ValidEmail, DateTime.UtcNow).Value;
+        var reservation = Reservation.Create(Guid.NewGuid(), Guid.NewGuid(), 2, "John Doe", ValidEmail, DateTime.UtcNow).Value;
         var code = ReservationCode.New(() => 123456);
         reservation.Confirm(code);
 
@@ -92,7 +95,7 @@ public class ReservationTests
     [Fact]
     public void Reservation_confirm_cancelled_fails_with_cancelled()
     {
-        var reservation = Reservation.Create(Guid.NewGuid(), 2, "John Doe", ValidEmail, DateTime.UtcNow).Value;
+        var reservation = Reservation.Create(Guid.NewGuid(), Guid.NewGuid(), 2, "John Doe", ValidEmail, DateTime.UtcNow).Value;
         var code = ReservationCode.New(() => 123456);
         reservation.Confirm(code);
         reservation.Cancel(
@@ -108,7 +111,7 @@ public class ReservationTests
     [Fact]
     public void Reservation_cancel_from_pending_fails()
     {
-        var reservation = Reservation.Create(Guid.NewGuid(), 2, "John Doe", ValidEmail, DateTime.UtcNow).Value;
+        var reservation = Reservation.Create(Guid.NewGuid(), Guid.NewGuid(), 2, "John Doe", ValidEmail, DateTime.UtcNow).Value;
 
         var result = reservation.Cancel(DateTime.UtcNow, DateTime.UtcNow.AddDays(2));
 
@@ -117,11 +120,39 @@ public class ReservationTests
     }
 
     [Fact]
+    public void Reservation_expire_from_pending_succeeds_and_clears_code()
+    {
+        var now = new DateTime(2030, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var reservation = Reservation.Create(Guid.NewGuid(), Guid.NewGuid(), 2, "John Doe", ValidEmail, now.AddMinutes(-10)).Value;
+
+        var result = reservation.Expire(now);
+
+        result.IsSuccess.Should().BeTrue();
+        reservation.Status.Should().Be(ReservationStatus.Cancelada);
+        reservation.CancelledUtc.Should().Be(now);
+        reservation.IsLost.Should().BeFalse();
+        reservation.Code.Should().BeNull();
+    }
+
+    [Fact]
+    public void Reservation_expire_from_confirmed_fails()
+    {
+        var now = new DateTime(2030, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var reservation = Reservation.Create(Guid.NewGuid(), Guid.NewGuid(), 2, "John Doe", ValidEmail, now).Value;
+        reservation.Confirm(ReservationCode.New(() => 123456));
+
+        var result = reservation.Expire(now);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("reservation.notPending");
+    }
+
+    [Fact]
     public void Reservation_cancel_from_already_cancelled_fails_with_cancelled()
     {
         var eventStart = new DateTime(2030, 6, 15, 20, 0, 0, DateTimeKind.Utc);
         var now = eventStart.AddDays(-3);
-        var reservation = Reservation.Create(Guid.NewGuid(), 2, "John Doe", ValidEmail, now.AddDays(-1)).Value;
+        var reservation = Reservation.Create(Guid.NewGuid(), Guid.NewGuid(), 2, "John Doe", ValidEmail, now.AddDays(-1)).Value;
         reservation.Confirm(ReservationCode.New(() => 123456));
         reservation.Cancel(now, eventStart);
 
@@ -136,7 +167,7 @@ public class ReservationTests
     {
         var eventStart = new DateTime(2030, 6, 15, 20, 0, 0, DateTimeKind.Utc);
         var now = eventStart.AddHours(-47);
-        var reservation = Reservation.Create(Guid.NewGuid(), 2, "John Doe", ValidEmail, now.AddDays(-1)).Value;
+        var reservation = Reservation.Create(Guid.NewGuid(), Guid.NewGuid(), 2, "John Doe", ValidEmail, now.AddDays(-1)).Value;
         reservation.Confirm(ReservationCode.New(() => 123456));
 
         var result = reservation.Cancel(now, eventStart);
@@ -153,7 +184,7 @@ public class ReservationTests
     {
         var eventStart = new DateTime(2030, 6, 15, 20, 0, 0, DateTimeKind.Utc);
         var now = eventStart.AddHours(-48);
-        var reservation = Reservation.Create(Guid.NewGuid(), 2, "John Doe", ValidEmail, now.AddDays(-1)).Value;
+        var reservation = Reservation.Create(Guid.NewGuid(), Guid.NewGuid(), 2, "John Doe", ValidEmail, now.AddDays(-1)).Value;
         reservation.Confirm(ReservationCode.New(() => 123456));
 
         var result = reservation.Cancel(now, eventStart);

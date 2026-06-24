@@ -28,6 +28,12 @@ public class ConfirmReservationHandlerTests
             => action();
     }
 
+    private sealed class NoOpReservationExpirer : IReservationExpirer
+    {
+        public Task ExpireOverduePendingReservationsAsync(Guid eventId, DateTime nowUtc, CancellationToken ct = default)
+            => Task.CompletedTask;
+    }
+
     private sealed class TestAppDbContext : DbContext, IAppDbContext
     {
         public TestAppDbContext(DbContextOptions<TestAppDbContext> options) : base(options) { }
@@ -36,6 +42,7 @@ public class ConfirmReservationHandlerTests
         public DbSet<Reservation> Reservations => Set<Reservation>();
         public DbSet<Venue> Venues => Set<Venue>();
         public DbSet<AppUser> Users => Set<AppUser>();
+        public void ResetChangeTracker() => ChangeTracker.Clear();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -62,10 +69,15 @@ public class ConfirmReservationHandlerTests
         public DateTime UtcNow => now;
     }
 
-    private sealed class SequenceRandom(params int[] values)
+    private sealed class SequenceRandom(params int[] values) : IRandomProvider
     {
         private int _index;
-        public int Next() => values[_index++];
+        public int Next(int minValue, int maxValue) => values[_index++];
+    }
+
+    private sealed class FixedRandom(int value) : IRandomProvider
+    {
+        public int Next(int minValue, int maxValue) => value;
     }
 
     private static TestAppDbContext CreateDb()
@@ -101,22 +113,27 @@ public class ConfirmReservationHandlerTests
             clock).Value;
     }
 
+    private static readonly Guid TestUserId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+
     private static Reservation CreatePendingReservation(Guid eventId, int quantity = 2)
     {
         var clock = new FixedClock(new DateTime(2030, 1, 1, 0, 0, 0, DateTimeKind.Utc));
         var email = Email.Create("buyer@example.com").Value;
-        return Reservation.Create(eventId, quantity, "John Doe", email, clock.UtcNow).Value;
+        return Reservation.Create(eventId, TestUserId, quantity, "John Doe", email, clock.UtcNow).Value;
     }
 
     private static ConfirmReservationHandler CreateHandler(
         IAppDbContext db,
-        Func<int>? randomSixDigits = null)
+        IRandomProvider? randomProvider = null,
+        IClock? clock = null)
     {
         return new ConfirmReservationHandler(
             db,
+            clock ?? new FixedClock(new DateTime(2030, 1, 1, 0, 0, 0, DateTimeKind.Utc)),
             new FakeReservationOptions(),
+            new NoOpReservationExpirer(),
             new NoOpConcurrencyRetryPolicy(),
-            randomSixDigits);
+            randomProvider ?? new FixedRandom(123456));
     }
 
     [Fact]
@@ -163,7 +180,7 @@ public class ConfirmReservationHandlerTests
         db.Reservations.Add(reservation);
         await db.SaveChangesAsync();
 
-        var handler = CreateHandler(db, () => 123456);
+        var handler = CreateHandler(db, new FixedRandom(123456));
         var first = await handler.Handle(new ConfirmReservationCommand(reservation.Id), CancellationToken.None);
         first.IsSuccess.Should().BeTrue();
 
@@ -186,7 +203,7 @@ public class ConfirmReservationHandlerTests
         db.Reservations.Add(reservation);
         await db.SaveChangesAsync();
 
-        var handler = CreateHandler(db, () => 123456);
+        var handler = CreateHandler(db, new FixedRandom(123456));
         var confirmResult = await handler.Handle(new ConfirmReservationCommand(reservation.Id), CancellationToken.None);
         confirmResult.IsSuccess.Should().BeTrue();
 
@@ -213,12 +230,12 @@ public class ConfirmReservationHandlerTests
         db.Reservations.AddRange(first, second);
         await db.SaveChangesAsync();
 
-        var firstHandler = CreateHandler(db, () => 1);
+        var firstHandler = CreateHandler(db, new FixedRandom(1));
         var firstResult = await firstHandler.Handle(new ConfirmReservationCommand(first.Id), CancellationToken.None);
         firstResult.IsSuccess.Should().BeTrue();
 
         var sequence = new SequenceRandom(1, 2);
-        var secondHandler = CreateHandler(db, sequence.Next);
+        var secondHandler = CreateHandler(db, sequence);
         var secondResult = await secondHandler.Handle(new ConfirmReservationCommand(second.Id), CancellationToken.None);
 
         secondResult.IsSuccess.Should().BeTrue();

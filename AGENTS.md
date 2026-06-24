@@ -24,7 +24,10 @@ Clean Architecture, 8 projects in `EventosVivos.slnx` (new XML solution format):
 | Application | `src/Application` | Domain |
 | Infrastructure | `src/Infrastructure` | Application, Domain |
 | Api | `src/Api` | Application, Infrastructure |
+| Domain.Tests | `tests/Domain.Tests` | Domain |
+| Application.Tests | `tests/Application.Tests` | Application, Domain |
 | Infrastructure.Tests | `tests/Infrastructure.Tests` | Infrastructure, Application, Domain |
+| Integration.Tests | `tests/Integration.Tests` | Api, Infrastructure, Application, Domain |
 
 Never invert these dependencies. No business exceptions — expected failures return `Result<T>`. All timestamps are UTC.
 

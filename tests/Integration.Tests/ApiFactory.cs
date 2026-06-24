@@ -3,6 +3,8 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using EventosVivos.Application.Auth.Login;
+using EventosVivos.Infrastructure.Persistence;
+using EventosVivos.Infrastructure.Persistence.Seed;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -43,6 +45,10 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     {
         await _postgres.StartAsync();
         Client = CreateClient();
+
+        await using var scope = Services.CreateAsyncScope();
+        var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        await DevDataSeeder.SeedAsync(context);
     }
 
     public new async Task DisposeAsync()
@@ -75,9 +81,10 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     public async Task ResetDatabaseAsync()
     {
         await using var scope = Services.CreateAsyncScope();
-        var context = scope.ServiceProvider.GetRequiredService<EventosVivos.Infrastructure.Persistence.AppDbContext>();
+        var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         await context.Database.ExecuteSqlRawAsync("DROP SCHEMA public CASCADE; CREATE SCHEMA public;");
         await context.Database.MigrateAsync();
+        await DevDataSeeder.SeedAsync(context);
     }
 
     public static JsonSerializerOptions JsonOptions => new(JsonSerializerDefaults.Web)

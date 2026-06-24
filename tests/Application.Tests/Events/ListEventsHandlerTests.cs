@@ -27,6 +27,7 @@ public class ListEventsHandlerTests
         public DbSet<Reservation> Reservations => Set<Reservation>();
         public DbSet<Venue> Venues => Set<Venue>();
         public DbSet<AppUser> Users => Set<AppUser>();
+        public void ResetChangeTracker() => ChangeTracker.Clear();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {

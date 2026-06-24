@@ -28,6 +28,7 @@ public class GetOccupancyHandlerTests
         public DbSet<Reservation> Reservations => Set<Reservation>();
         public DbSet<Venue> Venues => Set<Venue>();
         public DbSet<AppUser> Users => Set<AppUser>();
+        public void ResetChangeTracker() => ChangeTracker.Clear();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -88,10 +89,13 @@ public class GetOccupancyHandlerTests
             creationClock).Value;
     }
 
+    private static readonly Guid TestUserId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+
     private static Reservation CreateConfirmedReservation(Guid eventId, int quantity, DateTime nowUtc, string code)
     {
         var reservation = Reservation.Create(
             eventId,
+            TestUserId,
             quantity,
             "Buyer",
             Email.Create("buyer@example.com").Value,
@@ -121,7 +125,7 @@ public class GetOccupancyHandlerTests
         evt.ConsumeOnConfirm(10, new FakeReservationOptions());
         var lostReservation = CreateConfirmedReservation(evt.Id, 10, nowUtc, "000002");
         lostReservation.Cancel(nowUtc, evt.Schedule.StartUtc);
-        evt.ReleaseOnCancel(10, true);
+        evt.ReleaseOnCancel(10, true).IsSuccess.Should().BeTrue();
         db.Reservations.Add(lostReservation);
 
         await db.SaveChangesAsync();
