@@ -8,6 +8,7 @@ public sealed class Reservation
 {
     public Guid Id { get; private set; }
     public Guid EventId { get; private set; }
+    public Guid UserId { get; private set; }
     public int Quantity { get; private set; }
     public string BuyerName { get; private set; } = string.Empty;
     public Email Email { get; private set; } = null!;
@@ -23,6 +24,7 @@ public sealed class Reservation
 
     public static Result<Reservation> Create(
         Guid eventId,
+        Guid userId,
         int qty,
         string buyerName,
         Email email,
@@ -37,10 +39,14 @@ public sealed class Reservation
         if (email is null)
             return Result.Failure<Reservation>(new Error("reservation.email.required", "Email is required."));
 
+        if (userId == Guid.Empty)
+            return Result.Failure<Reservation>(new Error("reservation.userId.required", "User identifier is required."));
+
         return new Reservation
         {
             Id = Guid.NewGuid(),
             EventId = eventId,
+            UserId = userId,
             Quantity = qty,
             BuyerName = buyerName.Trim(),
             Email = email,
@@ -78,5 +84,17 @@ public sealed class Reservation
         IsLost = penalty;
 
         return Result.Success(penalty);
+    }
+
+    public Result Expire(DateTime nowUtc)
+    {
+        if (Status != ReservationStatus.PendientePago)
+            return Result.Failure(new Error("reservation.notPending", "Only pending reservations can expire."));
+
+        Status = ReservationStatus.Cancelada;
+        CancelledUtc = nowUtc;
+        IsLost = false;
+
+        return Result.Success();
     }
 }

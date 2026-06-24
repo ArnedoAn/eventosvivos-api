@@ -127,18 +127,32 @@ public sealed class Event
         return Result.Success();
     }
 
-    public void ReleaseOnCancel(int qty, bool penalty)
+    public Result ReleaseOnCancel(int qty, bool penalty)
     {
         if (qty <= 0)
-            throw new ArgumentException("Quantity must be greater than zero.", nameof(qty));
+            return Result.Failure(new Error("event.quantity.invalid", "Quantity must be greater than zero."));
 
         if (qty > SeatsTaken)
-            throw new InvalidOperationException($"Cannot release {qty} seats; only {SeatsTaken} are held.");
+            return Result.Failure(new Error("event.capacity.overRelease", "Cannot release more seats than are held."));
 
         SeatsTaken -= qty;
 
         if (penalty)
             SeatsLost += qty;
+
+        return Result.Success();
+    }
+
+    public Result ReleasePendingHold(int qty)
+    {
+        if (qty <= 0)
+            return Result.Failure(new Error("event.quantity.invalid", "Quantity must be greater than zero."));
+
+        if (qty > SeatsTaken)
+            return Result.Failure(new Error("event.capacity.overRelease", "Cannot release more seats than are held."));
+
+        SeatsTaken -= qty;
+        return Result.Success();
     }
 
     private static bool IsWeekendNight(DateTime startUtc)

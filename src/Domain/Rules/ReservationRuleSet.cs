@@ -11,6 +11,8 @@ public sealed class ReservationRuleSet
         _rules = rules?.OrderBy(r => r.Order).ToArray() ?? throw new ArgumentNullException(nameof(rules));
     }
 
+    public IReadOnlyList<IReservationRule> Rules => _rules;
+
     public Result Evaluate(ReservationRequest request)
     {
         foreach (var rule in _rules)
