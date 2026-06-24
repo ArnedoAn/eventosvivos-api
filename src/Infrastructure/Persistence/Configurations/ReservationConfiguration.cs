@@ -12,6 +12,7 @@ public class ReservationConfiguration : IEntityTypeConfiguration<Reservation>
 
         builder.HasKey(r => r.Id);
 
+        builder.Property(r => r.UserId).IsRequired();
         builder.Property(r => r.BuyerName).IsRequired().HasMaxLength(200);
         builder.Property(r => r.Quantity).IsRequired();
         builder.Property(r => r.CreatedUtc).IsRequired();

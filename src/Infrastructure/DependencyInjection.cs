@@ -34,6 +34,8 @@ public static class DependencyInjection
 
         services.AddScoped<IVenueScheduleChecker, EfVenueScheduleChecker>();
         services.AddScoped<IConcurrencyRetryPolicy, ConcurrencyRetryPolicy>();
+        services.AddScoped<IReservationExpirer, ReservationExpirer>();
+        services.AddScoped<IRandomProvider, RandomProvider>();
 
         return services;
     }

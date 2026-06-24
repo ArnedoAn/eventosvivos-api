@@ -3,6 +3,7 @@ using System;
 using EventosVivos.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace EventosVivos.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260624075956_UpdateSeedDataAndDevUsers")]
+    partial class UpdateSeedDataAndDevUsers
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -105,9 +108,6 @@ namespace EventosVivos.Infrastructure.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
                     b.HasKey("Id");
 
                     b.ToTable("Reservations", (string)null);
@@ -171,23 +171,23 @@ namespace EventosVivos.Infrastructure.Migrations
                         new
                         {
                             Id = 1,
-                            Capacity = 200,
+                            Capacity = 60000,
                             City = "Bogotá",
-                            Name = "Auditorio Central"
+                            Name = "Estadio El Campín"
                         },
                         new
                         {
                             Id = 2,
-                            Capacity = 50,
+                            Capacity = 1400,
                             City = "Bogotá",
-                            Name = "Sala Norte"
+                            Name = "Teatro Colón"
                         },
                         new
                         {
                             Id = 3,
-                            Capacity = 500,
-                            City = "Medellín",
-                            Name = "Arena Sur"
+                            Capacity = 9000,
+                            City = "Bogotá",
+                            Name = "Movistar Arena"
                         });
                 });
 

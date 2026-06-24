@@ -17,8 +17,8 @@ public class VenueConfiguration : IEntityTypeConfiguration<Venue>
         builder.Property(v => v.Capacity).IsRequired();
 
         builder.HasData(
-            new Venue(1, "Teatro Municipal", 500, "Bogotá"),
-            new Venue(2, "Centro de Convenciones", 1000, "Medellín"),
-            new Venue(3, "Sala de Conciertos", 300, "Cali"));
+            new Venue(1, "Auditorio Central", 200, "Bogotá"),
+            new Venue(2, "Sala Norte", 50, "Bogotá"),
+            new Venue(3, "Arena Sur", 500, "Medellín"));
     }
 }

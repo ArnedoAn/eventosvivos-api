@@ -13,4 +13,5 @@ public interface IAppDbContext
     DbSet<Venue> Venues { get; }
     DbSet<AppUser> Users { get; }
     Task<int> SaveChangesAsync(CancellationToken ct);
+    void ResetChangeTracker();
 }

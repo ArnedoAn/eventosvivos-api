@@ -6,14 +6,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace EventosVivos.Infrastructure.Persistence;
 
-public sealed class EfVenueScheduleChecker : IVenueScheduleChecker
+public sealed class EfVenueScheduleChecker(IAppDbContext db) : IVenueScheduleChecker
 {
-    private readonly IAppDbContext _db;
-
-    public EfVenueScheduleChecker(IAppDbContext db)
-    {
-        _db = db;
-    }
+    private readonly IAppDbContext _db = db;
 
     public Task<bool> HasOverlapAsync(
         int venueId,
