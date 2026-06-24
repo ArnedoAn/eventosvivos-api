@@ -12,6 +12,7 @@ namespace EventosVivos.Application.Reservations.CancelReservation;
 public sealed class CancelReservationHandler(
     IAppDbContext db,
     IClock clock,
+    IReservationExpirer expirer,
     IConcurrencyRetryPolicy retryPolicy)
     : IRequestHandler<CancelReservationCommand, Result<ReservationResponse>>
 {
@@ -19,11 +20,18 @@ public sealed class CancelReservationHandler(
     {
         return await retryPolicy.ExecuteAsync(async () =>
         {
+            var now = clock.UtcNow;
             var reservation = await db.Reservations
                 .FirstOrDefaultAsync(r => r.Id == request.ReservationId, cancellationToken);
 
+            if (reservation is not null)
+                await expirer.ExpireOverduePendingReservationsAsync(reservation.EventId, now, cancellationToken);
+
             if (reservation is null)
                 return Result.Failure<ReservationResponse>(new Error("reservation.notFound", "Reservation not found."));
+
+            if (!request.IsAdmin && reservation.UserId != request.UserId)
+                return Result.Failure<ReservationResponse>(new Error("reservation.forbidden", "You can only cancel your own reservations."));
 
             var evt = await db.Events
                 .FirstOrDefaultAsync(e => e.Id == reservation.EventId, cancellationToken);
@@ -35,13 +43,16 @@ public sealed class CancelReservationHandler(
             if (cancelResult.IsFailure)
                 return Result.Failure<ReservationResponse>(cancelResult.Error);
 
-            evt.ReleaseOnCancel(reservation.Quantity, cancelResult.Value);
+            var releaseResult = evt.ReleaseOnCancel(reservation.Quantity, cancelResult.Value);
+            if (releaseResult.IsFailure)
+                return Result.Failure<ReservationResponse>(releaseResult.Error);
 
             await db.SaveChangesAsync(cancellationToken);
 
             return Result.Success(new ReservationResponse(
                 reservation.Id,
                 reservation.EventId,
+                reservation.UserId,
                 reservation.Quantity,
                 reservation.BuyerName,
                 reservation.Email.Value,

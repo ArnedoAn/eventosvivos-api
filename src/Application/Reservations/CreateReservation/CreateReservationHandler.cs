@@ -16,6 +16,7 @@ public sealed class CreateReservationHandler(
     IClock clock,
     IReservationOptions options,
     ReservationRuleSet rules,
+    IReservationExpirer expirer,
     IConcurrencyRetryPolicy retryPolicy)
     : IRequestHandler<CreateReservationCommand, Result<ReservationResponse>>
 {
@@ -24,6 +25,8 @@ public sealed class CreateReservationHandler(
         return await retryPolicy.ExecuteAsync(async () =>
         {
             var now = clock.UtcNow;
+
+            await expirer.ExpireOverduePendingReservationsAsync(request.EventId, now, cancellationToken);
 
             var freshEvent = await db.Events
                 .FirstOrDefaultAsync(e => e.Id == request.EventId, cancellationToken);
@@ -57,6 +60,7 @@ public sealed class CreateReservationHandler(
 
             var reservationResult = Reservation.Create(
                 freshEvent.Id,
+                request.UserId,
                 request.Quantity,
                 request.BuyerName,
                 emailResult.Value,
@@ -72,6 +76,7 @@ public sealed class CreateReservationHandler(
             return Result.Success(new ReservationResponse(
                 r.Id,
                 r.EventId,
+                r.UserId,
                 r.Quantity,
                 r.BuyerName,
                 r.Email.Value,

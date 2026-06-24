@@ -2,7 +2,6 @@ using EventosVivos.Application.Abstractions;
 using EventosVivos.Application.Reservations.CreateReservation;
 using EventosVivos.Domain.Abstractions;
 using EventosVivos.Domain.Common;
-using EventosVivos.Domain.Enums;
 using EventosVivos.Domain.Events;
 using EventosVivos.Domain.Reservations;
 using EventosVivos.Domain.ValueObjects;
@@ -11,32 +10,32 @@ using Microsoft.EntityFrameworkCore;
 
 namespace EventosVivos.Application.Reservations.ConfirmReservation;
 
-public sealed class ConfirmReservationHandler
-    : IRequestHandler<ConfirmReservationCommand, Result<ReservationResponse>>
+public sealed class ConfirmReservationHandler(
+    IAppDbContext db,
+    IClock clock,
+    IReservationOptions options,
+    IReservationExpirer expirer,
+    IConcurrencyRetryPolicy retryPolicy,
+    IRandomProvider randomProvider)
+        : IRequestHandler<ConfirmReservationCommand, Result<ReservationResponse>>
 {
-    private readonly IAppDbContext _db;
-    private readonly IReservationOptions _options;
-    private readonly IConcurrencyRetryPolicy _retryPolicy;
-    private readonly Func<int> _randomSixDigits;
-
-    public ConfirmReservationHandler(
-        IAppDbContext db,
-        IReservationOptions options,
-        IConcurrencyRetryPolicy retryPolicy,
-        Func<int>? randomSixDigits = null)
-    {
-        _db = db;
-        _options = options;
-        _retryPolicy = retryPolicy;
-        _randomSixDigits = randomSixDigits ?? (() => Random.Shared.Next(0, 1_000_000));
-    }
+    private readonly IAppDbContext _db = db;
+    private readonly IClock _clock = clock;
+    private readonly IReservationOptions _options = options;
+    private readonly IReservationExpirer _expirer = expirer;
+    private readonly IConcurrencyRetryPolicy _retryPolicy = retryPolicy;
+    private readonly IRandomProvider _randomProvider = randomProvider;
 
     public async Task<Result<ReservationResponse>> Handle(ConfirmReservationCommand request, CancellationToken cancellationToken)
     {
         return await _retryPolicy.ExecuteAsync(async () =>
         {
+            var now = _clock.UtcNow;
             var reservation = await _db.Reservations
                 .FirstOrDefaultAsync(r => r.Id == request.ReservationId, cancellationToken);
+
+            if (reservation is not null)
+                await _expirer.ExpireOverduePendingReservationsAsync(reservation.EventId, now, cancellationToken);
 
             if (reservation is null)
                 return Result.Failure<ReservationResponse>(new Error("reservation.notFound", "Reservation not found."));
@@ -64,6 +63,7 @@ public sealed class ConfirmReservationHandler
             return Result.Success(new ReservationResponse(
                 reservation.Id,
                 reservation.EventId,
+                reservation.UserId,
                 reservation.Quantity,
                 reservation.BuyerName,
                 reservation.Email.Value,
@@ -77,12 +77,12 @@ public sealed class ConfirmReservationHandler
         const int maxAttempts = 10;
         for (var attempt = 0; attempt < maxAttempts; attempt++)
         {
-            var code = ReservationCode.New(_randomSixDigits);
+            var code = ReservationCode.New(() => _randomProvider.Next(0, 1_000_000));
             var exists = await _db.Reservations
                 .AnyAsync(r =>
                     r.Id != currentReservationId &&
-                    r.Status == ReservationStatus.Confirmada &&
-                    r.Code!.Value == code.Value, cancellationToken);
+                    r.Code != null &&
+                    r.Code.Value == code.Value, cancellationToken);
 
             if (!exists)
                 return code;
