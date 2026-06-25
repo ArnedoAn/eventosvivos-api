@@ -14,7 +14,7 @@ using Microsoft.OpenApi;
 var builder = WebApplication.CreateBuilder(args);
 
 var allowedOrigins = builder.Configuration
-    .GetValue<string>("Cors__AllowedOrigins")
+    .GetValue<string>("Cors:AllowedOrigins")
     ?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
     ?? ["http://localhost:3000", "http://localhost:4200", "http://localhost:5173", "http://localhost:8080"];
 
