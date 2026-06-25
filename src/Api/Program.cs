@@ -114,13 +114,17 @@ using (var scope = app.Services.CreateScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-    if (app.Environment.IsDevelopment() || builder.Configuration.GetValue<bool>("RunMigrations"))
+    var runMigrations = app.Environment.IsDevelopment()
+        || builder.Configuration.GetValue<bool>("RunMigrations");
+
+    if (runMigrations)
     {
         await dbContext.Database.MigrateAsync();
-    }
 
-    if (app.Environment.IsDevelopment())
-    {
+        // Seed the canonical admin/user accounts. Idempotent (checks for
+        // existing emails) and required in production: the migrations delete
+        // the InitialCreate-seeded users, so without this seed there are no
+        // accounts to log in with.
         await DevDataSeeder.SeedAsync(dbContext);
     }
 }
