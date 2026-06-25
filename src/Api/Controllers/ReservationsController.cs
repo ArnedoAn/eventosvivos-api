@@ -2,6 +2,8 @@ using EventosVivos.Api.Common;
 using EventosVivos.Application.Reservations.CancelReservation;
 using EventosVivos.Application.Reservations.ConfirmReservation;
 using EventosVivos.Application.Reservations.CreateReservation;
+using EventosVivos.Application.Reservations.ListReservations;
+using EventosVivos.Domain.Enums;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -18,6 +20,23 @@ public sealed record CreateReservationRequest(
 [Route("api/[controller]")]
 public sealed class ReservationsController(ISender sender) : ControllerBase
 {
+    [HttpGet]
+    [Authorize(Roles = "Admin")]
+    [ProducesResponseType(typeof(IReadOnlyList<ReservationListItem>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> List(
+        [FromQuery] Guid? eventId,
+        [FromQuery] ReservationStatus? status,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await sender.Send(new ListReservationsQuery(eventId, status, page, pageSize), cancellationToken);
+        return result.ToActionResult(Ok);
+    }
+
     [HttpPost]
     [Authorize(Roles = "User")]
     [ProducesResponseType(typeof(ReservationResponse), StatusCodes.Status201Created)]

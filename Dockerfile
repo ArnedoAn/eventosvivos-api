@@ -25,6 +25,9 @@ RUN dotnet publish src/Api/EventosVivos.Api.csproj \
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
 
+# Install curl for healthchecks and container debugging
+RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
+
 # Expose the default ASP.NET Core HTTP port
 EXPOSE 8080
 
